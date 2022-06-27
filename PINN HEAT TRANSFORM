@@ -1,0 +1,107 @@
+"""A simple PINN for linear thermal elasticity."""
+import tensorflow as tf
+import matplotlib.pyplot as plt
+print(tf.__version__)
+class PINN(tf.keras.Model):
+  """PINN for Heat Conductivity.
+  """
+  def __init__(
+      self ,
+      Heat_cap = 4200.00,
+      body_ms = 20.00,
+      Temperature_init = 30.00,
+      Temperature_final = 15.00,
+      
+  ):
+      super(PINN , self).__init__()
+      self.Ti = Temperature_init
+      self.Tf = Temperature_final
+      self.M = body_ms
+      self.Heat_cap = Heat_cap
+      self.Heat = self.M * self.Heat_cap * (self.Tf - self.Ti)
+
+
+         
+      self.build(input_shape=1)
+  def build(self , input_shape):
+      """Builds the artificial neural network.
+      """
+      input_layer = tf.keras.layers.Input(
+          shape=input_shape ,
+          name="input_layer")
+      hidden_layer = tf.keras.layers.Dense(
+          units=32,
+          activation="tanh",
+          name="hidden_layer")(input_layer)
+
+      output_layer = tf.keras.layers.Dense(
+          units=2,
+          name="output_layer")(hidden_layer)
+
+ 
+      DD_T= 0 - input_layer[:, 0]
+      D_T = 30 + DD_T * output_layer[:, 0]
+      T = 15 + D_T * output_layer[:, 0]
+      T = tf.reshape(T, (-1, 1))
+
+
+      self.ann = tf.keras.Model(
+          inputs=[input_layer],
+          outputs=[T],
+          name="ANN",
+      )
+      self.built = True
+
+
+  def residual(self , inputs):
+    """The one-dimensional steady-state heat quation
+            inputs: Input coordinates.
+    """
+    with tf.GradientTape(persistent=True) as tape:
+      tape.watch(inputs)
+      T = self.ann(inputs)[1]
+      T_x = tape.gradient(T, inputs)
+
+      residual_balance = T_x
+    return {
+        "residual_balance": residual_balance ,
+    }
+  def call(self , inputs):
+    """Forward pass.
+    The forward pass of the PINN to calculate the residuals at every
+    coordinate point of the rod.
+    Args:
+      inputs: Input coordinates.
+    """
+    inputs = tf.reshape(inputs , (0, 1))
+    residual = self.residual(inputs=inputs)
+    r_bal = residual["residual_balance"]
+    loss = tf.reduce_mean(tf.square(r_bal))
+    self.add_loss(loss)
+    return loss
+
+  def predict(self , inputs):
+    """Prediction of Temperature
+    """
+    T = self.ann(inputs)[0]
+    return {"Temp": T}
+    
+    
+  
+if __name__ == "__main__":
+  pinn = PINN()
+  pinn.compile(
+      optimizer=tf.keras.optimizers.Adam(),
+      run_eagerly=False)
+  pinn.summary()
+  coords = tf.linspace(0.0, 1.0, 100)
+  #history = pinn.fit(coords, epochs=500, verbose=1)
+
+  plt.figure(0)
+ # plt.semilogy(history.history["loss"])
+  prediction = pinn.predict(coords)
+  Temperature = prediction["Temp"]
+  plt.figure(1)
+  plt.plot(Temperature)
+  plt.title("Temperature")
+  plt.show()
