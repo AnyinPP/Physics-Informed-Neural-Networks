@@ -32,7 +32,7 @@ class PINN(tf.keras.Model):
         self.X = strain
         self.Temp = temperature_0
         self.Temp1 = temperature_1
-        self.sig = self.Temp1 * self.X + self.Temp
+        self.sig = (self.Temp1 - self.Temp) * self.X + self.Temp
         
         self.build(input_shape=1)
 
